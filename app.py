@@ -154,7 +154,7 @@ def ask_gemini(history, language):
     from google.genai import types
     client=genai.Client(api_key=key)
     contents=[types.Content(role='user' if m.role=='user' else 'model',parts=[types.Part(text=m.content)]) for m in history[-16:]]
-    response=client.models.generate_content(model=os.getenv('GEMINI_MODEL','gemini-2.5-flash'), contents=contents, config=types.GenerateContentConfig(system_instruction=SYSTEM_AR if language=='ar' else SYSTEM_HE,temperature=0.5,max_output_tokens=650))
+    response=client.models.generate_content(model=os.getenv('GEMINI_MODEL','gemini-3.8-flash'), contents=contents, config=types.GenerateContentConfig(system_instruction=SYSTEM_AR if language=='ar' else SYSTEM_HE,temperature=0.5,max_output_tokens=1500))
     return (response.text or '').strip() or 'לא התקבלה תשובה מהמודל'
 
 @app.post('/api/chat')

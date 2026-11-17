@@ -34,7 +34,7 @@ python app.py
 5. הגדר Environment Variables:
    - `SECRET_KEY` מחרוזת ארוכה אקראית
    - `GEMINI_API_KEY` מפתח **חדש** שלא נחשף בצ'אט
-   - `GEMINI_MODEL` למשל `gemini-2.5-flash` (כפוף לזמינות בחשבון)
+   - `GEMINI_MODEL` למשל `gemini-3.8-flash` (כפוף לזמינות בחשבון)
    - `DATABASE_URL` כתובת החיבור הפנימית של PostgreSQL
    - `COOKIE_SECURE=true`
    - `ALLOW_TEACHER_SIGNUP=true` זמנית בלבד בעת הקמת המורה הראשון
