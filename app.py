@@ -168,9 +168,12 @@ def chat():
     db.session.add(Message(student_id=current_user.id,role='user',content=content));db.session.commit()
     try:
         response=ask_gemini(history+[Message(role='user',content=content)],current_user.language)
-    except Exception:
+    except Exception as e:
         app.logger.exception('Gemini request failed')
-        return jsonify(error='לא ניתן לקבל תשובה כעת. בדוק את הגדרות Gemini או נסה שוב.'),503
+        detail=f'{type(e).__name__}: {str(e)[:300]}'
+        key=os.getenv('GEMINI_API_KEY') or ''
+        if key: detail=detail.replace(key,'***')
+        return jsonify(error='לא ניתן לקבל תשובה כעת. בדוק את הגדרות Gemini או נסה שוב.',detail=detail),503
     db.session.add(Message(student_id=current_user.id,role='model',content=response));db.session.commit()
     return jsonify(reply=response)
 
