@@ -152,7 +152,7 @@ def ask_gemini(history, language):
     if not key: raise RuntimeError('מפתח Gemini טרם הוגדר בשרת')
     from google import genai
     from google.genai import types
-    client=genai.Client(api_key=key)
+    client=genai.Client(api_key=key,http_options=types.HttpOptions(timeout=25000))  # 25 s per call
     contents=[types.Content(role='user' if m.role=='user' else 'model',parts=[types.Part(text=m.content)]) for m in history[-16:]]
     import time
     primary=(os.getenv('GEMINI_MODEL') or 'gemini-3.8-flash').strip()
@@ -162,14 +162,14 @@ def ask_gemini(history, language):
     response=None;last=None;start=time.time()
     for model in models:
         for attempt in range(2):
-            if time.time()-start>80: break
+            if time.time()-start>55: break
             try:
                 response=client.models.generate_content(model=model,contents=contents,config=cfg)
                 break
             except Exception as e:
                 last=e
                 code=getattr(e,'code',None) or getattr(e,'status_code',None)
-                if code==404: break            # model not available -> next model
+                if code==404 or code is None: break   # model missing or timed out -> next model
                 if code not in (429,500,503,504): raise
                 if attempt==0: time.sleep(2)
         if response is not None: break
@@ -192,7 +192,7 @@ def chat():
         detail=f'{type(e).__name__}: {str(e)[:300]}'
         key=(os.getenv('GEMINI_API_KEY') or '').strip()
         if key: detail=detail.replace(key,'***')
-        busy=getattr(e,'code',None) in (429,503)
+        busy=getattr(e,'code',None) in (429,500,503,504,None)
         msg='שירות ה-AI עמוס כרגע. נסה שוב בעוד דקה.' if busy else 'לא ניתן לקבל תשובה כעת. בדוק את הגדרות Gemini או נסה שוב.'
         return jsonify(error=msg,detail=detail),503
     db.session.add(Message(student_id=current_user.id,role='model',content=response));db.session.commit()
