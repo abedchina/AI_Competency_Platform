@@ -161,7 +161,8 @@ def ask_gemini(history, language):
     cfg=types.GenerateContentConfig(system_instruction=SYSTEM_AR if language=='ar' else SYSTEM_HE,temperature=0.5,max_output_tokens=1500)
     response=None;last=None;start=time.time()
     for model in models:
-        for attempt in range(2):
+        tries=4 if model==primary else 2
+        for attempt in range(tries):
             if time.time()-start>55: break
             try:
                 response=client.models.generate_content(model=model,contents=contents,config=cfg)
@@ -171,7 +172,7 @@ def ask_gemini(history, language):
                 code=getattr(e,'code',None) or getattr(e,'status_code',None)
                 if code==404 or code is None: break   # model missing or timed out -> next model
                 if code not in (429,500,503,504): raise
-                if attempt==0: time.sleep(2)
+                if attempt<tries-1: time.sleep(2*(attempt+1))
         if response is not None: break
     if response is None: raise last or RuntimeError('Gemini unavailable')
     return (response.text or '').strip() or 'לא התקבלה תשובה מהמודל'
