@@ -10,6 +10,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-only-change-before-deployment')
 db_url = os.getenv('DATABASE_URL', 'sqlite:///platform.db')
 if db_url.startswith('postgres://'): db_url = 'postgresql://' + db_url[11:]
+if db_url.startswith('postgresql://'): db_url = 'postgresql+psycopg://' + db_url[13:]  # psycopg 3 driver
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
