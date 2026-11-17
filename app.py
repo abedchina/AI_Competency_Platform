@@ -148,13 +148,13 @@ SYSTEM_HE = '''אתה מנחה פדגוגי לתלמידי תיכון באלקט
 SYSTEM_AR = '''أنت مرشد تربوي لطلاب المرحلة الثانوية في الإلكترونيات. هدفك تنمية كفايات الذكاء الاصطناعي أثناء إعداد مقترح مشروع. لا تكتب المشروع كاملاً بدلاً من الطالب. عندما يكون السؤال عاماً، وضح ما ينقصه (المشكلة، المستفيدون، القيود، التحقق)، وقدّم تلميحاً ثم اطلب من الطالب تحسين سؤاله بنفسه. شجّع البحث والمقارنة والتحقق والنقد. لا تختلق مصادر. ناقش المشكلة والحاجة والأهداف والبدائل والمكونات والاختبارات والمخاطر. أجب بالعربية الواضحة باختصار. لا تصنف مستوى الطالب من رسالة واحدة.'''
 
 def ask_gemini(history, language):
-    key=os.getenv('GEMINI_API_KEY')
+    key=(os.getenv('GEMINI_API_KEY') or '').strip()
     if not key: raise RuntimeError('מפתח Gemini טרם הוגדר בשרת')
     from google import genai
     from google.genai import types
     client=genai.Client(api_key=key)
     contents=[types.Content(role='user' if m.role=='user' else 'model',parts=[types.Part(text=m.content)]) for m in history[-16:]]
-    response=client.models.generate_content(model=os.getenv('GEMINI_MODEL','gemini-3.8-flash'), contents=contents, config=types.GenerateContentConfig(system_instruction=SYSTEM_AR if language=='ar' else SYSTEM_HE,temperature=0.5,max_output_tokens=1500))
+    response=client.models.generate_content(model=(os.getenv('GEMINI_MODEL') or 'gemini-3.8-flash').strip(), contents=contents, config=types.GenerateContentConfig(system_instruction=SYSTEM_AR if language=='ar' else SYSTEM_HE,temperature=0.5,max_output_tokens=1500))
     return (response.text or '').strip() or 'לא התקבלה תשובה מהמודל'
 
 @app.post('/api/chat')
@@ -171,7 +171,7 @@ def chat():
     except Exception as e:
         app.logger.exception('Gemini request failed')
         detail=f'{type(e).__name__}: {str(e)[:300]}'
-        key=os.getenv('GEMINI_API_KEY') or ''
+        key=(os.getenv('GEMINI_API_KEY') or '').strip()
         if key: detail=detail.replace(key,'***')
         return jsonify(error='לא ניתן לקבל תשובה כעת. בדוק את הגדרות Gemini או נסה שוב.',detail=detail),503
     db.session.add(Message(student_id=current_user.id,role='model',content=response));db.session.commit()
