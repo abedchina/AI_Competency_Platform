@@ -17,6 +17,7 @@ app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.getenv('COOKIE_SECURE', 'false').lower() == 'true'
+import competency as comp
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -79,7 +80,8 @@ def setup_csrf():
 
 @app.context_processor
 def common():
-    return {'csrf_token': session.get('csrf_token'), 'lang': current_user.language if current_user.is_authenticated else session.get('lang', 'he')}
+    lang = current_user.language if current_user.is_authenticated else session.get('lang', 'he')
+    return {'csrf_token': session.get('csrf_token'), 'lang': lang, 'comp': comp, 'L': (lambda item: comp.t(item, lang))}
 
 @app.route('/language/<code>')
 def language(code):
@@ -144,8 +146,6 @@ def student_dashboard():
     messages=Message.query.filter_by(student_id=current_user.id).order_by(Message.id.asc()).all()
     return render_template('student.html',project=project,messages=messages)
 
-SYSTEM_HE = '''אתה מנחה פדגוגי לתלמידי תיכון באלקטרוניקה. המטרה היא לפתח כשירות AI תוך גיבוש הצעת פרויקט. אל תכתוב מיד הצעה שלמה ואל תעשה את החשיבה במקום התלמיד. כאשר הפרומפט עמום, הסבר בנימוס מה חסר (בעיה, משתמשים, אילוצים, בדיקה), הצע שיפור קצר ובקש מהתלמיד לנסח בעצמו. קדם חקר, השוואת חלופות, אימות מקורות וחשיבה ביקורתית. הבהר אי-ודאות ואל תמציא מקורות. התייחס לתיאור הבעיה והצורך, מטרות, חלופות, פתרון, רכיבים, בדיקות וסיכונים. השב בעברית בהירה, עד 180 מילים. אין לקבוע לתלמיד רמת כשירות מתוך שיחה אחת.'''
-SYSTEM_AR = '''أنت مرشد تربوي لطلاب المرحلة الثانوية في الإلكترونيات. هدفك تنمية كفايات الذكاء الاصطناعي أثناء إعداد مقترح مشروع. لا تكتب المشروع كاملاً بدلاً من الطالب. عندما يكون السؤال عاماً، وضح ما ينقصه (المشكلة، المستفيدون، القيود، التحقق)، وقدّم تلميحاً ثم اطلب من الطالب تحسين سؤاله بنفسه. شجّع البحث والمقارنة والتحقق والنقد. لا تختلق مصادر. ناقش المشكلة والحاجة والأهداف والبدائل والمكونات والاختبارات والمخاطر. أجب بالعربية الواضحة باختصار. لا تصنف مستوى الطالب من رسالة واحدة.'''
 
 def ask_gemini(history, language):
     key=(os.getenv('GEMINI_API_KEY') or '').strip()
@@ -158,7 +158,7 @@ def ask_gemini(history, language):
     primary=(os.getenv('GEMINI_MODEL') or 'gemini-3.8-flash').strip()
     extra=[m.strip() for m in os.getenv('GEMINI_FALLBACK_MODELS','gemini-flash-latest,gemini-flash-lite-latest').split(',') if m.strip()]
     models=[primary]+[m for m in extra if m!=primary]
-    cfg=types.GenerateContentConfig(system_instruction=SYSTEM_AR if language=='ar' else SYSTEM_HE,temperature=0.5,max_output_tokens=1500)
+    cfg=types.GenerateContentConfig(system_instruction=comp.system_prompt(language),temperature=0.5,max_output_tokens=1500)
     response=None;last=None;start=time.time()
     for model in models:
         tries=4 if model==primary else 2
@@ -222,18 +222,6 @@ def teacher_dashboard():
         rows.append((st,project,n))
     return render_template('teacher.html',rows=rows)
 
-def preliminary_evidence(messages):
-    user_texts=[m.content for m in messages if m.role=='user']
-    combined=' '.join(user_texts).lower()
-    patterns={
-        'prompt_detail':r'מטרה|אילוץ|דרישה|חיישן|מגבלה|هدف|قيود|متطلبات|مستشعر',
-        'research':r'השוו|השווא|חלופ|יתרון|חסרון|قارن|بديل|مقارنة|ميزة',
-        'verification':r'בדק|מקור|אימות|ניסוי|מדיד|تحقق|مصدر|تجربة|قياس',
-        'engineering':r'רכיב|מעגל|תכנון|קוד|בדיקה|مكونات|دائرة|تصميم|اختبار'
-    }
-    flags={k:bool(re.search(v,combined)) for k,v in patterns.items()}
-    return {'turns':len(user_texts),'signals':flags,'note':'סימנים ראשוניים בלבד. לא נקבעת רמת כשירות אוטומטית: יש לבחון איכות, עצמאות וראיות לאורך זמן.'}
-
 @app.route('/teacher/student/<int:student_id>')
 @teacher_only
 def student_review(student_id):
@@ -241,7 +229,7 @@ def student_review(student_id):
     if not student or student.teacher_id!=current_user.id: abort(404)
     project=Project.query.filter_by(student_id=student.id).first()
     messages=Message.query.filter_by(student_id=student.id).order_by(Message.id.asc()).all()
-    return render_template('review.html',student=student,project=project,messages=messages,evidence=preliminary_evidence(messages))
+    return render_template('review.html',student=student,project=project,messages=messages,evidence=comp.preliminary_evidence(messages,current_user.language))
 
 @app.post('/teacher/student/<int:student_id>/feedback')
 @teacher_only
@@ -256,6 +244,10 @@ def feedback(student_id):
     project.status=request.form.get('status') if request.form.get('status') in ('draft','submitted','revision','approved') else project.status
     db.session.commit();flash('משוב המורה נשמר')
     return redirect(url_for('student_review',student_id=student.id))
+
+@app.route('/framework')
+def framework():
+    return render_template('framework.html')
 
 @app.route('/health')
 def health(): return jsonify(status='ok')

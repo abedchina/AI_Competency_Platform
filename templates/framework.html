@@ -1,0 +1,35 @@
+{% extends 'base.html' %}{% block content %}
+<section class="hero">
+  <span class="tag">{{'إطار الكفايات' if lang=='ar' else 'המסגרת הפדגוגית'}}</span>
+  <h1>{{'خريج مسار هندسة الإلكترونيات والحاسوب' if lang=='ar' else 'בוגר מגמת הנדסת אלקטרוניקה ומחשבים'}}</h1>
+  <p>{{L(comp.MISSION)}}</p>
+</section>
+
+<section class="panel" style="margin-top:22px">
+  <h2>🧭 {{'الكفايات الأساسية للخريج' if lang=='ar' else 'כשירויות הליבה של הבוגר'}}</h2>
+  <div class="comps">
+    {% for c in comp.COMPETENCIES %}{% set x = L(c) %}
+    <article class="comp"><h3>{{loop.index}}. {{x.name}}</h3><p>{{x.desc}}</p><small>{{'مثال' if lang=='ar' else 'דוגמה'}}: {{x.example}}</small></article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel" style="margin-top:22px">
+  <h2>📈 {{'مستويات كفاية الذكاء الاصطناعي' if lang=='ar' else 'רמות כשירות AI'}}</h2>
+  <div class="levels">
+    {% for n, lv in comp.LEVELS.items() %}{% set x = L(lv) %}
+    <article class="level {{'target' if n==comp.TARGET_LEVEL}}" data-badge="{{'المستوى المستهدف' if lang=='ar' else 'רמת היעד'}}">
+      <div class="num">{{n}}</div><h3>{{x.name}}</h3><p>{{x.desc}}</p><div class="ev">{{'أدلة' if lang=='ar' else 'ראיות'}}: {{x.evidence}}</div>
+    </article>
+    {% endfor %}
+  </div>
+  <div class="note"><b>{{'القدرة المستهدفة' if lang=='ar' else 'היכולת שאליה מכוונים'}}:</b> {{L(comp.TARGET_CAPABILITY)}}<br><b>{{'تمييز تربوي' if lang=='ar' else 'הבחנה פדגוגית'}}:</b> {{L(comp.PEDAGOGICAL_NOTE)}}</div>
+</section>
+
+<section class="grid">
+  <article class="panel"><div class="emoji">💬</div><h2>{{'الطالب' if lang=='ar' else 'התלמיד'}}</h2><p class="hint">{{'يتحاور مع مرشد ذكاء اصطناعي لا يكتب عنه المشروع، بل يوجهه بالأسئلة نحو المستوى 3: الدمج والفحص والقرار المستقل.' if lang=='ar' else 'משוחח עם מנחה AI שלא כותב בשבילו את הפרויקט, אלא מכוון אותו בשאלות לרמה 3: שילוב, בדיקה והחלטה עצמאית.'}}</p></article>
+  <article class="panel"><div class="emoji">📝</div><h2>{{'المقترح' if lang=='ar' else 'הצעת הפרויקט'}}</h2><p class="sections">{{L(comp.PROPOSAL_SECTIONS)}}</p></article>
+  <article class="panel"><div class="emoji">📊</div><h2>{{'المعلم' if lang=='ar' else 'המורה'}}</h2><p class="hint">{{'يرى الحوار والمؤشرات الأولية لكل كفاية، ويحدد المستوى بنفسه بناءً على الأدلة. لا يوجد تقييم آلي.' if lang=='ar' else 'רואה את השיחה וסימנים ראשוניים לכל כשירות, וקובע בעצמו את הרמה לפי הראיות. אין ציון אוטומטי.'}}</p></article>
+</section>
+<div class="actions" style="margin-top:22px;justify-content:center"><a class="btn" href="{{url_for('index')}}">{{'رجوع' if lang=='ar' else 'חזרה לדף הבית'}}</a></div>
+{% endblock %}
