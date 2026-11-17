@@ -41,6 +41,20 @@ class Project(db.Model):
     teacher_level = db.Column(db.Integer, nullable=True)
     student = db.relationship('User', foreign_keys=[student_id])
 
+class ProposalVersion(db.Model):
+    """A snapshot of the proposal each time the student submits it."""
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    number = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(250), default='')
+    proposal = db.Column(db.Text, default='')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    msg_count = db.Column(db.Integer, default=0)          # student chat messages at submit time
+    signals = db.Column(db.Text, default='[]')            # competency keys seen in the chat (JSON)
+    teacher_feedback = db.Column(db.Text, default='')     # feedback the teacher gave on this version
+    teacher_level = db.Column(db.Integer, nullable=True)
+    status = db.Column(db.String(30), default='submitted')
+
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -56,7 +70,9 @@ def teacher_only(fn):
     @wraps(fn)
     @login_required
     def inner(*args, **kwargs):
-        if current_user.role != 'teacher': abort(403)
+        if current_user.role != 'teacher':
+            flash('אתה מחובר כתלמיד. כדי להיכנס כמורה, התנתק והיכנס עם חשבון המורה (או השתמש בחלון גלישה בסתר).' if current_user.language!='ar' else 'أنت مسجل كطالب. لتدخل كمعلم، اخرج وادخل بحساب المعلم (أو استخدم نافذة تصفح خفي).')
+            return redirect(url_for('index'))
         return fn(*args, **kwargs)
     return inner
 
@@ -64,7 +80,10 @@ def student_only(fn):
     @wraps(fn)
     @login_required
     def inner(*args, **kwargs):
-        if current_user.role != 'student': abort(403)
+        if current_user.role != 'student':
+            if request.path.startswith('/api/'): return jsonify(error='החשבון המחובר אינו חשבון תלמיד. רענן את הדף.'),403
+            flash('אתה מחובר כמורה. כדי להיכנס כתלמיד, התנתק והיכנס עם חשבון התלמיד (או השתמש בחלון גלישה בסתר).' if current_user.language!='ar' else 'أنت مسجل كمعلم. لتدخل كطالب، اخرج وادخل بحساب الطالب (أو استخدم نافذة تصفح خفي).')
+            return redirect(url_for('index'))
         return fn(*args, **kwargs)
     return inner
 
@@ -207,9 +226,17 @@ def save_proposal():
         project=Project(student_id=current_user.id);db.session.add(project)
     project.title=request.form.get('title','').strip()[:250]
     project.proposal=request.form.get('proposal','').strip()[:15000]
-    project.status='submitted' if request.form.get('action')=='submit' else 'draft'
+    submitting=request.form.get('action')=='submit'
+    project.status='submitted' if submitting else ('revision' if project.status=='revision' else 'draft')
+    if submitting:
+        msgs=Message.query.filter_by(student_id=current_user.id).order_by(Message.id.asc()).all()
+        ev=comp.preliminary_evidence(msgs)
+        n=ProposalVersion.query.filter_by(student_id=current_user.id).count()+1
+        db.session.add(ProposalVersion(student_id=current_user.id,number=n,title=project.title,proposal=project.proposal,
+                                       msg_count=ev['turns'],signals=json.dumps([x['key'] for x in ev['signals'] if x['found']])))
     db.session.commit()
-    flash('ההצעה נשמרה');return redirect(url_for('student_dashboard'))
+    flash(('ההצעה הוגשה למורה' if submitting else 'הטיוטה נשמרה') if current_user.language!='ar' else ('تم تقديم المقترح للمعلم' if submitting else 'تم حفظ المسودة'))
+    return redirect(url_for('student_dashboard'))
 
 @app.route('/teacher')
 @teacher_only
@@ -219,8 +246,33 @@ def teacher_dashboard():
     for st in students:
         project=Project.query.filter_by(student_id=st.id).first()
         n=Message.query.filter_by(student_id=st.id,role='user').count()
-        rows.append((st,project,n))
+        rows.append((st,project,n,ProposalVersion.query.filter_by(student_id=st.id).count()))
     return render_template('teacher.html',rows=rows)
+
+def diff_html(old, new):
+    """Word-level diff: added words in <ins>, removed words in <del>."""
+    import difflib
+    from markupsafe import Markup, escape
+    a, b = re.split(r'(\s+)', old), re.split(r'(\s+)', new)
+    out = []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if op == 'equal':
+            out.append(escape(''.join(a[i1:i2])))
+        if op in ('delete', 'replace') and ''.join(a[i1:i2]).strip():
+            out.append(Markup('<del>') + escape(''.join(a[i1:i2])) + Markup('</del>'))
+        if op in ('insert', 'replace') and ''.join(b[j1:j2]).strip():
+            out.append(Markup('<ins>') + escape(''.join(b[j1:j2])) + Markup('</ins>'))
+    return Markup('').join(out)
+
+def local_time(dt):
+    if not dt: return ''
+    if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
+    try:
+        from zoneinfo import ZoneInfo
+        dt = dt.astimezone(ZoneInfo('Asia/Jerusalem'))
+    except Exception:
+        pass
+    return dt.strftime('%d/%m/%Y %H:%M')
 
 @app.route('/teacher/student/<int:student_id>')
 @teacher_only
@@ -229,7 +281,17 @@ def student_review(student_id):
     if not student or student.teacher_id!=current_user.id: abort(404)
     project=Project.query.filter_by(student_id=student.id).first()
     messages=Message.query.filter_by(student_id=student.id).order_by(Message.id.asc()).all()
-    return render_template('review.html',student=student,project=project,messages=messages,evidence=comp.preliminary_evidence(messages,current_user.language))
+    versions=ProposalVersion.query.filter_by(student_id=student.id).order_by(ProposalVersion.number.asc()).all()
+    history=[]
+    prev=None
+    for v in versions:
+        found=set(json.loads(v.signals or '[]'))
+        history.append({'v':v,'when':local_time(v.created_at),'found':found,
+                        'diff':diff_html(prev.title+'\n'+prev.proposal, v.title+'\n'+v.proposal) if prev else None,
+                        'added':len(found-set(json.loads(prev.signals or '[]'))) if prev else None})
+        prev=v
+    return render_template('review.html',student=student,project=project,messages=messages,
+                           evidence=comp.preliminary_evidence(messages,current_user.language),history=history[::-1])
 
 @app.post('/teacher/student/<int:student_id>/feedback')
 @teacher_only
@@ -242,6 +304,9 @@ def feedback(student_id):
     level=request.form.get('level','')
     project.teacher_level=int(level) if level in ('1','2','3','4') else None
     project.status=request.form.get('status') if request.form.get('status') in ('draft','submitted','revision','approved') else project.status
+    latest=ProposalVersion.query.filter_by(student_id=student.id).order_by(ProposalVersion.number.desc()).first()
+    if latest:
+        latest.teacher_feedback=project.teacher_feedback; latest.teacher_level=project.teacher_level; latest.status=project.status
     db.session.commit();flash('משוב המורה נשמר')
     return redirect(url_for('student_review',student_id=student.id))
 

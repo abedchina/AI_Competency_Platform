@@ -23,6 +23,22 @@
 </div>
 
 <section class="panel" style="margin-top:22px">
+  <h2>🕓 {{'سجل المقترح والتقدم' if lang=='ar' else 'היסטוריית ההצעה וההתקדמות'}}</h2>
+  {% if not history %}<p class="hint">{{'لم تُقدَّم نسخة بعد. كل تقديم من الطالب يُحفظ هنا كنسخة.' if lang=='ar' else 'עדיין לא הוגשה גרסה. כל הגשה של התלמיד נשמרת כאן כגרסה נפרדת.'}}</p>{% else %}
+  <div class="tablewrap"><table class="progress"><thead><tr><th>{{'نسخة' if lang=='ar' else 'גרסה'}}</th><th>{{'تاريخ' if lang=='ar' else 'תאריך'}}</th><th>{{'رسائل بحث' if lang=='ar' else 'הודעות חקר'}}</th><th>{{'كفايات ظهرت' if lang=='ar' else 'כשירויות שהופיעו'}}</th><th>{{'مستوى' if lang=='ar' else 'רמה'}}</th><th>{{'الحالة' if lang=='ar' else 'סטטוס'}}</th></tr></thead><tbody>
+  {% for h in history|reverse %}<tr><td><b>{{h.v.number}}</b></td><td>{{h.when}}</td><td>{{h.v.msg_count}}</td><td><span class="dots">{% for c in comp.COMPETENCIES %}<span class="dot {{'on' if c.key in h.found}}" title="{{L(c).name}}"></span>{% endfor %}</span> {{h.found|length}}/5{% if h.added %} <span class="up">▲ +{{h.added}}</span>{% endif %}</td><td>{% if h.v.teacher_level %}<span class="lvl-badge">{{h.v.teacher_level}} · {{L(comp.LEVELS[h.v.teacher_level]).name}}</span>{% else %}—{% endif %}</td><td><span class="status {{h.v.status}}">{{L(comp.STATUS[h.v.status])}}</span></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% for h in history %}
+  <details class="version" {% if loop.first %}open{% endif %}><summary>{{'نسخة' if lang=='ar' else 'גרסה'}} {{h.v.number}} · {{h.when}} · <span class="status {{h.v.status}}">{{L(comp.STATUS[h.v.status])}}</span></summary>
+    {% if h.v.teacher_feedback %}<div class="alert"><strong>{{'ملاحظات المعلم على هذه النسخة' if lang=='ar' else 'משוב המורה על גרסה זו'}}:</strong> {{h.v.teacher_feedback}}</div>{% endif %}
+    {% if h.diff is not none %}<p class="hint">{{'مقارنة بالنسخة السابقة:' if lang=='ar' else 'השוואה לגרסה הקודמת:'}} <ins>{{'أُضيف' if lang=='ar' else 'נוסף'}}</ins> · <del>{{'حُذف' if lang=='ar' else 'נמחק'}}</del></p><div class="proposal diff">{{h.diff}}</div>
+    {% else %}<p class="hint">{{'النسخة الأولى' if lang=='ar' else 'גרסה ראשונה'}}</p><div class="proposal"><b>{{h.v.title}}</b>
+{{h.v.proposal}}</div>{% endif %}
+  </details>
+  {% endfor %}{% endif %}
+</section>
+
+<section class="panel" style="margin-top:22px">
   <h2>📈 {{'دليل المستويات' if lang=='ar' else 'מדריך הרמות להערכה'}}</h2>
   <div class="levels">{% for n, lv in comp.LEVELS.items() %}{% set x = L(lv) %}<article class="level {{'target' if n==comp.TARGET_LEVEL}} {{'current' if project and project.teacher_level==n}}" data-badge="{{'المستهدف' if lang=='ar' else 'רמת היעד'}}"><div class="num">{{n}}</div><h3>{{x.name}}</h3><p>{{x.desc}}</p><div class="ev">{{'أدلة' if lang=='ar' else 'ראיות'}}: {{x.evidence}}</div></article>{% endfor %}</div>
   <div class="note"><b>{{'تمييز تربوي' if lang=='ar' else 'הבחנה פדגוגית'}}:</b> {{L(comp.PEDAGOGICAL_NOTE)}}</div>

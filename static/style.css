@@ -23,3 +23,12 @@
 .sections{font-size:13px;color:#4d5d72;line-height:1.8}
 @media(max-width:900px){.levels{grid-template-columns:1fr 1fr}.comps{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.levels,.comps{grid-template-columns:1fr}}
+/* proposal history */
+.diff ins{background:#c9f2e4;color:#0b5a49;text-decoration:none;border-radius:4px;padding:0 2px}
+.diff del{background:#fde0e0;color:#9b1c1c;border-radius:4px;padding:0 2px}
+.hint ins{background:#c9f2e4;color:#0b5a49;text-decoration:none;padding:0 4px;border-radius:4px}.hint del{background:#fde0e0;color:#9b1c1c;padding:0 4px;border-radius:4px}
+.version{border:1px solid #e0e8f0;border-radius:12px;padding:12px 16px;margin-top:12px;background:#fbfcfe}
+.version summary{cursor:pointer;font-weight:700}
+.version .proposal{max-height:none;margin-top:8px}
+.dots{display:inline-flex;gap:4px;vertical-align:middle}.dots .dot{width:11px;height:11px;border-radius:50%;background:#d5dee8;display:inline-block}.dots .dot.on{background:#00a99d}
+.progress .up{color:#0f766e;font-weight:700;font-size:13px}
