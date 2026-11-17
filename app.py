@@ -154,7 +154,15 @@ def ask_gemini(history, language):
     from google.genai import types
     client=genai.Client(api_key=key)
     contents=[types.Content(role='user' if m.role=='user' else 'model',parts=[types.Part(text=m.content)]) for m in history[-16:]]
-    response=client.models.generate_content(model=(os.getenv('GEMINI_MODEL') or 'gemini-3.8-flash').strip(), contents=contents, config=types.GenerateContentConfig(system_instruction=SYSTEM_AR if language=='ar' else SYSTEM_HE,temperature=0.5,max_output_tokens=1500))
+    import time
+    for attempt in range(3):
+        try:
+            response=client.models.generate_content(model=(os.getenv('GEMINI_MODEL') or 'gemini-3.8-flash').strip(), contents=contents, config=types.GenerateContentConfig(system_instruction=SYSTEM_AR if language=='ar' else SYSTEM_HE,temperature=0.5,max_output_tokens=1500))
+            break
+        except Exception as e:
+            code=getattr(e,'code',None) or getattr(e,'status_code',None)
+            if code not in (429,500,503,504) or attempt==2: raise
+            time.sleep(1.5*(attempt+1))
     return (response.text or '').strip() or 'לא התקבלה תשובה מהמודל'
 
 @app.post('/api/chat')
@@ -173,7 +181,9 @@ def chat():
         detail=f'{type(e).__name__}: {str(e)[:300]}'
         key=(os.getenv('GEMINI_API_KEY') or '').strip()
         if key: detail=detail.replace(key,'***')
-        return jsonify(error='לא ניתן לקבל תשובה כעת. בדוק את הגדרות Gemini או נסה שוב.',detail=detail),503
+        busy=getattr(e,'code',None) in (429,503)
+        msg='שירות ה-AI עמוס כרגע. נסה שוב בעוד דקה.' if busy else 'לא ניתן לקבל תשובה כעת. בדוק את הגדרות Gemini או נסה שוב.'
+        return jsonify(error=msg,detail=detail),503
     db.session.add(Message(student_id=current_user.id,role='model',content=response));db.session.commit()
     return jsonify(reply=response)
 
