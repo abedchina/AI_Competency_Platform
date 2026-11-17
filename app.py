@@ -155,14 +155,25 @@ def ask_gemini(history, language):
     client=genai.Client(api_key=key)
     contents=[types.Content(role='user' if m.role=='user' else 'model',parts=[types.Part(text=m.content)]) for m in history[-16:]]
     import time
-    for attempt in range(3):
-        try:
-            response=client.models.generate_content(model=(os.getenv('GEMINI_MODEL') or 'gemini-3.8-flash').strip(), contents=contents, config=types.GenerateContentConfig(system_instruction=SYSTEM_AR if language=='ar' else SYSTEM_HE,temperature=0.5,max_output_tokens=1500))
-            break
-        except Exception as e:
-            code=getattr(e,'code',None) or getattr(e,'status_code',None)
-            if code not in (429,500,503,504) or attempt==2: raise
-            time.sleep(1.5*(attempt+1))
+    primary=(os.getenv('GEMINI_MODEL') or 'gemini-3.8-flash').strip()
+    extra=[m.strip() for m in os.getenv('GEMINI_FALLBACK_MODELS','gemini-flash-latest,gemini-flash-lite-latest').split(',') if m.strip()]
+    models=[primary]+[m for m in extra if m!=primary]
+    cfg=types.GenerateContentConfig(system_instruction=SYSTEM_AR if language=='ar' else SYSTEM_HE,temperature=0.5,max_output_tokens=1500)
+    response=None;last=None;start=time.time()
+    for model in models:
+        for attempt in range(2):
+            if time.time()-start>80: break
+            try:
+                response=client.models.generate_content(model=model,contents=contents,config=cfg)
+                break
+            except Exception as e:
+                last=e
+                code=getattr(e,'code',None) or getattr(e,'status_code',None)
+                if code==404: break            # model not available -> next model
+                if code not in (429,500,503,504): raise
+                if attempt==0: time.sleep(2)
+        if response is not None: break
+    if response is None: raise last or RuntimeError('Gemini unavailable')
     return (response.text or '').strip() or 'לא התקבלה תשובה מהמודל'
 
 @app.post('/api/chat')
