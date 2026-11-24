@@ -17,6 +17,15 @@ app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.getenv('COOKIE_SECURE', 'false').lower() == 'true'
+# Stay signed in for 30 days (survives closing the browser).
+from datetime import timedelta
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_SECURE'] = app.config['SESSION_COOKIE_SECURE']
+# Hosted Postgres (Neon, Render) drops idle connections; test each one before use.
+if not db_url.startswith('sqlite'):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True, 'pool_recycle': 280}
 import competency as comp
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -140,7 +149,7 @@ def register():
                 flash('יש להזין כתובת דוא״ל של מורה רשום'); return redirect(url_for('register'))
             teacher_id = teacher.id
         user=User(name=name,email=email,password_hash=generate_password_hash(password),role=role,teacher_id=teacher_id,language=session.get('lang','he'))
-        db.session.add(user); db.session.commit(); login_user(user)
+        db.session.add(user); db.session.commit(); login_user(user, remember=True)
         return redirect(url_for('index'))
     return render_template('register.html')
 
@@ -149,7 +158,7 @@ def login():
     if request.method=='POST':
         user=User.query.filter_by(email=request.form.get('email','').strip().lower()).first()
         if user and check_password_hash(user.password_hash,request.form.get('password','')):
-            login_user(user); return redirect(url_for('index'))
+            login_user(user, remember=True); return redirect(url_for('index'))
         flash('פרטי כניסה שגויים')
     return render_template('login.html')
 
@@ -315,7 +324,9 @@ def framework():
     return render_template('framework.html')
 
 @app.route('/health')
-def health(): return jsonify(status='ok')
+def health():
+    # 'storage' shows whether data survives restarts: sqlite on Render is wiped on every restart.
+    return jsonify(status='ok', storage=db.engine.dialect.name)
 
 with app.app_context(): db.create_all()
 
